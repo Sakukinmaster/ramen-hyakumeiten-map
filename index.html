@@ -243,23 +243,20 @@
         }
 
         // 2. a.env에서 API 키 가져오기
-        async function loadGoogleMapScript() {
-            try {
-                const response = await fetch('a.env');
-                const text = await response.text();
-                const apiKey = text.split('=')[1]?.trim();
+        function loadGoogleMapScript() {
+    const apiKey = "GOOGLE_MAPS_API_KEY_PLACEHOLDER"; 
 
-                if (!apiKey) return;
+    if (!apiKey || apiKey.includes("PLACEHOLDER")) {
+        console.warn("API 키가 아직 설정되지 않았습니다.");
+        return;
+    }
 
-                const script = document.createElement('script');
-                script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initMap`;
-                script.async = true;
-                script.defer = true;
-                document.head.appendChild(script);
-            } catch (err) {
-                console.warn("a.env 읽기 실패", err);
-            }
-        }
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initMap`;
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+}
 
         // 3. 구글 지도 초기화
         window.initMap = function() {
@@ -380,7 +377,7 @@
                     <span class="shop-rating">★ ${shop.rating}</span>
                 `;
 
-                // 🔥 [핵심 기능] 매장 카드 클릭 시 타베로그 웹페이지로 바로 이동
+                // 매장 카드 클릭 시 타베로그 웹페이지로 바로 이동
                 li.addEventListener('click', () => {
                     // 지도가 있다면 해당 마커 위치로 이동
                     if (map && shop.lat && shop.lng) {
