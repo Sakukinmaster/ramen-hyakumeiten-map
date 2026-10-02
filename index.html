@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>타베로그 백명점 라멘 지도 검색</title>
+    <style>
+        * { box-sizing: border-box; }
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+        }
+
+        #map {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            background-color: #e5e3df;
+        }
+
+        #sidebar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 340px;
+            height: 100%;
+            background-color: #ffffff;
+            border-right: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease-in-out;
+            z-index: 100;
+            box-shadow: 3px 0 10px rgba(0,0,0,0.15);
+        }
+
+        #sidebar.collapsed {
+            transform: translateX(-340px);
+        }
+
+        #toggle-btn {
+            position: absolute;
+            top: 20px;
+            right: -45px;
+            width: 45px;
+            height: 42px;
+            background-color: #ff5722;
+            color: white;
+            border: none;
+            border-radius: 0 8px 8px 0;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            box-shadow: 2px 2px 6px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sidebar-content {
+            padding: 20px;
+            overflow-y: auto;
+            height: 100%;
+        }
+
+        h2 { font-size: 1.2rem; margin-top: 0; color: #333; }
+        .filter-title { font-size: 0.9rem; font-weight: bold; margin: 12px 0 6px 0; color: #444; }
+
+        .search-box {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .select-box {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-bottom: 12px;
+            background-color: #fff;
+            cursor: pointer;
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 6px;
+            max-height: 140px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            margin-bottom: 15px;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            font-size: 0.85rem;
+            color: #333;
+            cursor: pointer;
+        }
+
+        .checkbox-item input {
+            margin-right: 8px;
+            cursor: pointer;
+        }
+
+        .shop-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        /* 매장 카드 스타일 (마우스 올리면 링크 클릭 느낌) */
+        .shop-item {
+            background: white;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            border: 1px solid #eee;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .shop-item:hover {
+            background-color: #fff8f5;
+            border-color: #ffccbc;
+            transform: translateY(-1px);
+        }
+
+        .shop-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .rank-badge {
+            background-color: #ff5722;
+            color: white;
+            font-size: 0.8rem;
+            font-weight: bold;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .shop-info h4 { margin: 0 0 4px 0; font-size: 0.95rem; color: #111; }
+        .shop-info p { margin: 0; font-size: 0.8rem; color: #666; }
+        
+        .shop-rating {
+            background-color: #fff3e0;
+            color: #e65100;
+            padding: 5px 8px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.85rem;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <button id="toggle-btn" onclick="toggleSidebar()">☰</button>
+        <div class="sidebar-content">
+            <h2>🍜 라멘 백명점 검색</h2>
+            
+            <input type="text" id="searchInput" class="search-box" placeholder="가게 이름 검색...">
+            
+            <div class="filter-title">정렬 방식</div>
+            <select id="sortSelect" class="select-box">
+                <option value="rating">★ 별점 높은 순 (순위 보기)</option>
+                <option value="default">기본순</option>
+            </select>
+
+            <div class="filter-title">지역 필터</div>
+            <div class="checkbox-group" id="regionFilterContainer">
+                <label class="checkbox-item">
+                    <input type="checkbox" id="checkAll" checked> <strong>전체 선택</strong>
+                </label>
+                <hr style="border: 0; border-top: 1px solid #ddd; margin: 2px 0; width: 100%;">
+            </div>
+
+            <div class="filter-title">매장 목록 (<span id="count">0</span>개)</div>
+            <ul id="shopListContainer" class="shop-list"></ul>
+        </div>
+    </div>
+
+    <div id="map">지도를 로딩 중입니다...</div>
+
+    <script>
+        let map = null;
+        let geocoder = null;
+        let markers = [];
+        let ramenData = [];
+
+        const sidebar = document.getElementById('sidebar');
+        const searchInput = document.getElementById('searchInput');
+        const sortSelect = document.getElementById('sortSelect');
+        const regionFilterContainer = document.getElementById('regionFilterContainer');
+        const listContainer = document.getElementById('shopListContainer');
+        const countSpan = document.getElementById('count');
+
+        function toggleSidebar() {
+            sidebar.classList.toggle('collapsed');
+        }
+
+        // 1. ramen_list.json 읽기
+        function loadRamenData() {
+            fetch('ramen_list.json')
+                .then(res => res.json())
+                .then(data => {
+                    ramenData = data;
+                    initRegionFilters();
+                    applyFiltersAndRender();
+                    loadGoogleMapScript();
+                })
+                .catch(err => {
+                    console.error("데이터 로드 에러:", err);
+                    listContainer.innerHTML = '<li style="padding: 15px; color: red; text-align: center;">ramen_list.json을 불러올 수 없습니다.</li>';
+                });
+        }
+
+        // 2. a.env에서 API 키 가져오기
+        async function loadGoogleMapScript() {
+            try {
+                const response = await fetch('a.env');
+                const text = await response.text();
+                const apiKey = text.split('=')[1]?.trim();
+
+                if (!apiKey) return;
+
+                const script = document.createElement('script');
+                script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initMap`;
+                script.async = true;
+                script.defer = true;
+                document.head.appendChild(script);
+            } catch (err) {
+                console.warn("a.env 읽기 실패", err);
+            }
+        }
+
+        // 3. 구글 지도 초기화
+        window.initMap = function() {
+            if (typeof google === 'undefined' || !google.maps) return;
+
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: 35.681236, lng: 139.767125 }, // 도쿄 기준
+                zoom: 11,
+                mapTypeControl: false,
+                streetViewControl: false
+            });
+
+            geocoder = new google.maps.Geocoder();
+            applyFiltersAndRender();
+        };
+
+        function initRegionFilters() {
+            const existingItems = regionFilterContainer.querySelectorAll('.dynamic-region');
+            existingItems.forEach(el => el.remove());
+
+            const regions = [...new Set(ramenData.map(item => item.region))];
+            
+            regions.forEach(region => {
+                const label = document.createElement('label');
+                label.className = 'checkbox-item dynamic-region';
+                label.innerHTML = `
+                    <input type="checkbox" class="region-check" value="${region}" checked> ${region}
+                `;
+                regionFilterContainer.appendChild(label);
+            });
+
+            document.getElementById('checkAll').addEventListener('change', handleCheckAll);
+            document.querySelectorAll('.region-check').forEach(chk => {
+                chk.addEventListener('change', handleRegionCheck);
+            });
+        }
+
+        function handleCheckAll(e) {
+            document.querySelectorAll('.region-check').forEach(chk => chk.checked = e.target.checked);
+            applyFiltersAndRender();
+        }
+
+        function handleRegionCheck() {
+            const allBoxes = document.querySelectorAll('.region-check');
+            const checkedBoxes = document.querySelectorAll('.region-check:checked');
+            document.getElementById('checkAll').checked = (allBoxes.length === checkedBoxes.length);
+            applyFiltersAndRender();
+        }
+
+        function applyFiltersAndRender() {
+            const keyword = searchInput.value.toLowerCase().trim();
+            const selectedRegions = Array.from(document.querySelectorAll('.region-check:checked')).map(cb => cb.value);
+            const sortMode = sortSelect.value;
+
+            let result = ramenData.filter(shop => {
+                const matchesKeyword = shop.name.toLowerCase().includes(keyword);
+                const matchesRegion = selectedRegions.includes(shop.region);
+                return matchesKeyword && matchesRegion;
+            });
+
+            if (sortMode === 'rating') {
+                result.sort((a, b) => parseFloat(b.rating) - parseFloat(a.rating));
+            }
+
+            renderShopsAndMarkers(result, sortMode === 'rating');
+        }
+
+        // 4. 목록 출력 및 지도 마커 꽂기
+        function renderShopsAndMarkers(dataToRender, showRank = false) {
+            // 기존 마커 지우기
+            markers.forEach(m => m.setMap(null));
+            markers = [];
+
+            listContainer.innerHTML = '';
+            countSpan.textContent = dataToRender.length;
+
+            if (dataToRender.length === 0) {
+                listContainer.innerHTML = '<li style="padding: 15px; text-align: center; color: #888;">조건에 맞는 매장이 없습니다.</li>';
+                return;
+            }
+
+            const bounds = (map && typeof google !== 'undefined') ? new google.maps.LatLngBounds() : null;
+
+            dataToRender.forEach((shop, index) => {
+                // (1) 지도가 로드되어 있는 경우 마커 처리
+                if (map) {
+                    // lat/lng이 json에 직접 선언된 경우
+                    if (shop.lat && shop.lng) {
+                        const pos = { lat: parseFloat(shop.lat), lng: parseFloat(shop.lng) };
+                        createMarker(pos, shop, bounds);
+                    } 
+                    // lat/lng이 없으면 지오코더로 가게 이름 검색하여 위치 탐색
+                    else if (geocoder) {
+                        geocoder.geocode({ address: `${shop.region} ${shop.name}` }, (results, status) => {
+                            if (status === 'OK' && results[0]) {
+                                const pos = results[0].geometry.location;
+                                shop.lat = pos.lat();
+                                shop.lng = pos.lng();
+                                createMarker(pos, shop, bounds);
+                            }
+                        });
+                    }
+                }
+
+                // (2) 사이드바 매장 카드 생성
+                const li = document.createElement('li');
+                li.className = 'shop-item';
+                const rankHtml = showRank ? `<div class="rank-badge">${index + 1}</div>` : '';
+
+                li.innerHTML = `
+                    <div class="shop-left">
+                        ${rankHtml}
+                        <div class="shop-info">
+                            <h4>${shop.name}</h4>
+                            <p>📍 ${shop.region}</p>
+                        </div>
+                    </div>
+                    <span class="shop-rating">★ ${shop.rating}</span>
+                `;
+
+                // 🔥 [핵심 기능] 매장 카드 클릭 시 타베로그 웹페이지로 바로 이동
+                li.addEventListener('click', () => {
+                    // 지도가 있다면 해당 마커 위치로 이동
+                    if (map && shop.lat && shop.lng) {
+                        map.panTo({ lat: parseFloat(shop.lat), lng: parseFloat(shop.lng) });
+                        map.setZoom(16);
+                    }
+                    
+                    // 타베로그 URL이 존재하면 새 탭으로 이동
+                    if (shop.url && shop.url !== "https://tabelog.com/...") {
+                        window.open(shop.url, '_blank');
+                    }
+                });
+
+                listContainer.appendChild(li);
+            });
+        }
+
+        // 마커 생성 공통 함수
+        function createMarker(position, shop, bounds) {
+            const marker = new google.maps.Marker({
+                position: position,
+                map: map,
+                title: shop.name
+            });
+
+            const infoWindow = new google.maps.InfoWindow({
+                content: `
+                    <div style="padding: 6px; font-family: sans-serif;">
+                        <strong style="font-size: 14px;">${shop.name}</strong><br>
+                        <span style="color: #e65100; font-weight: bold;">★ ${shop.rating}</span> | ${shop.region}<br>
+                        <a href="${shop.url}" target="_blank" style="color: #2196F3; font-size: 12px; display: inline-block; margin-top: 4px;">타베로그 상세 보기 ➔</a>
+                    </div>
+                `
+            });
+
+            marker.addListener('click', () => infoWindow.open(map, marker));
+            markers.push(marker);
+
+            if (bounds) {
+                bounds.extend(position);
+                map.fitBounds(bounds);
+            }
+        }
+
+        searchInput.addEventListener('input', applyFiltersAndRender);
+        sortSelect.addEventListener('change', applyFiltersAndRender);
+
+        loadRamenData();
+    </script>
+</body>
+</html>
