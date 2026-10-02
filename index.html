@@ -2,7 +2,10 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>타베로그 백명점 라멘 지도 검색</title>
+    <!-- env.js가 존재하는 배포 환경을 위한 스크립트 로드 (없어도 오류 무시) -->
+    <script src="env.js" onerror="this.onerror=null;"></script>
     <style>
         * { box-sizing: border-box; }
         body, html {
@@ -123,7 +126,6 @@
             margin: 0;
         }
 
-        /* 매장 카드 스타일 (마우스 올리면 링크 클릭 느낌) */
         .shop-item {
             background: white;
             padding: 12px;
@@ -226,7 +228,7 @@
             sidebar.classList.toggle('collapsed');
         }
 
-        // 1. ramen_list.json 읽기
+        // 1. 데이터 로드
         function loadRamenData() {
             fetch('ramen_list.json')
                 .then(res => res.json())
@@ -234,7 +236,7 @@
                     ramenData = data;
                     initRegionFilters();
                     applyFiltersAndRender();
-                    loadGoogleMapScript();
+                    getApiKeyAndLoadMap();
                 })
                 .catch(err => {
                     console.error("데이터 로드 에러:", err);
@@ -242,28 +244,45 @@
                 });
         }
 
-        // 2. a.env에서 API 키 가져오기
-        function loadGoogleMapScript() {
-    const apiKey = "GOOGLE_MAPS_API_KEY_PLACEHOLDER"; 
+        // 2. API 키 획득 (Vercel 배포 환경 변수 우선 -> 실패 시 로컬 a.env 파일 읽기)
+        async function getApiKeyAndLoadMap() {
+            let apiKey = window.GOOGLE_MAPS_API_KEY;
 
-    if (!apiKey || apiKey.includes("PLACEHOLDER")) {
-        console.warn("API 키가 아직 설정되지 않았습니다.");
-        return;
-    }
+            if (!apiKey) {
+                try {
+                    const response = await fetch('a.env');
+                    if (response.ok) {
+                        const text = await response.text();
+                        apiKey = text.split('=')[1]?.trim();
+                    }
+                } catch (e) {
+                    console.log("a.env 파일 읽기 실패");
+                }
+            }
 
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initMap`;
-    script.async = true;
-    script.defer = true;
-    document.head.appendChild(script);
-}
+            if (!apiKey) {
+                console.warn("구글 API 키를 읽어올 수 없습니다.");
+                return;
+            }
 
-        // 3. 구글 지도 초기화
+            loadGoogleMapScript(apiKey);
+        }
+
+        // 3. 구글 지도의 SDK 로드
+        function loadGoogleMapScript(apiKey) {
+            const script = document.createElement('script');
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=initMap`;
+            script.async = true;
+            script.defer = true;
+            document.head.appendChild(script);
+        }
+
+        // 4. 지도 초기화
         window.initMap = function() {
             if (typeof google === 'undefined' || !google.maps) return;
 
             map = new google.maps.Map(document.getElementById('map'), {
-                center: { lat: 35.681236, lng: 139.767125 }, // 도쿄 기준
+                center: { lat: 35.681236, lng: 139.767125 },
                 zoom: 11,
                 mapTypeControl: false,
                 streetViewControl: false
@@ -324,9 +343,7 @@
             renderShopsAndMarkers(result, sortMode === 'rating');
         }
 
-        // 4. 목록 출력 및 지도 마커 꽂기
         function renderShopsAndMarkers(dataToRender, showRank = false) {
-            // 기존 마커 지우기
             markers.forEach(m => m.setMap(null));
             markers = [];
 
@@ -341,15 +358,11 @@
             const bounds = (map && typeof google !== 'undefined') ? new google.maps.LatLngBounds() : null;
 
             dataToRender.forEach((shop, index) => {
-                // (1) 지도가 로드되어 있는 경우 마커 처리
                 if (map) {
-                    // lat/lng이 json에 직접 선언된 경우
                     if (shop.lat && shop.lng) {
                         const pos = { lat: parseFloat(shop.lat), lng: parseFloat(shop.lng) };
                         createMarker(pos, shop, bounds);
-                    } 
-                    // lat/lng이 없으면 지오코더로 가게 이름 검색하여 위치 탐색
-                    else if (geocoder) {
+                    } else if (geocoder) {
                         geocoder.geocode({ address: `${shop.region} ${shop.name}` }, (results, status) => {
                             if (status === 'OK' && results[0]) {
                                 const pos = results[0].geometry.location;
@@ -361,7 +374,6 @@
                     }
                 }
 
-                // (2) 사이드바 매장 카드 생성
                 const li = document.createElement('li');
                 li.className = 'shop-item';
                 const rankHtml = showRank ? `<div class="rank-badge">${index + 1}</div>` : '';
@@ -377,15 +389,11 @@
                     <span class="shop-rating">★ ${shop.rating}</span>
                 `;
 
-                // 매장 카드 클릭 시 타베로그 웹페이지로 바로 이동
                 li.addEventListener('click', () => {
-                    // 지도가 있다면 해당 마커 위치로 이동
                     if (map && shop.lat && shop.lng) {
                         map.panTo({ lat: parseFloat(shop.lat), lng: parseFloat(shop.lng) });
                         map.setZoom(16);
                     }
-                    
-                    // 타베로그 URL이 존재하면 새 탭으로 이동
                     if (shop.url && shop.url !== "https://tabelog.com/...") {
                         window.open(shop.url, '_blank');
                     }
@@ -395,7 +403,6 @@
             });
         }
 
-        // 마커 생성 공통 함수
         function createMarker(position, shop, bounds) {
             const marker = new google.maps.Marker({
                 position: position,
